@@ -1,11 +1,10 @@
+# stdlib
 import logging
 import os
 import time
 import unittest
 
-from nose.plugins.attrib import attr
-from nose.plugins.skip import SkipTest
-
+# project
 from aggregator import MetricsAggregator
 from checks import (
     AgentCheck,
@@ -17,6 +16,8 @@ from checks import (
 from checks.collector import Collector
 from tests.checks.common import load_check
 from util import get_hostname
+from utils.ntp import get_ntp_args
+from utils.proxy import get_proxy
 
 logger = logging.getLogger()
 
@@ -95,7 +96,7 @@ class TestCore(unittest.TestCase):
         self.c.save_sample("test-metric", 1.0, 0.0)  # value, ts
         self.c.save_sample("test-counter", 1.0, 1.0) # value, ts
         self.c.save_sample("test-counter", 4.0, 2.0) # value, ts
-        assert "test-metric"  in self.c.get_samples_with_timestamps(expire=False), self.c.get_samples_with_timestamps(expire=False)
+        assert "test-metric" in self.c.get_samples_with_timestamps(expire=False), self.c.get_samples_with_timestamps(expire=False)
         self.assertEquals(self.c.get_samples_with_timestamps(expire=False)["test-metric"], (0.0, 1.0, None, None))
         assert "test-counter" in self.c.get_samples_with_timestamps(expire=False), self.c.get_samples_with_timestamps(expire=False)
         self.assertEquals(self.c.get_samples_with_timestamps(expire=False)["test-counter"], (2.0, 3.0, None, None))
@@ -118,13 +119,6 @@ class TestCore(unittest.TestCase):
         self.assertEqual(self.ac.normalize("PauseTotalNs", "prefix", fix_case = True), "prefix.pause_total_ns")
         self.assertEqual(self.ac.normalize("Metric.wordThatShouldBeSeparated", "prefix", fix_case = True), "prefix.metric.word_that_should_be_separated")
 
-    def test_metadata(self):
-        c = Collector({"collect_instance_metadata": True}, None, {}, "foo")
-        metadata = c._get_metadata()
-        assert "hostname" in metadata
-        assert "socket-fqdn" in metadata
-        assert "socket-hostname" in metadata
-
     def test_service_check(self):
         check_name = 'test.service_check'
         status = AgentCheck.CRITICAL
@@ -140,23 +134,23 @@ class TestCore(unittest.TestCase):
         check_run_id = val[0].get('id', None)
         self.assertNotEquals(check_run_id, None)
         self.assertEquals([{
-                    'id': check_run_id,
-                    'check': check_name,
-                    'status': status,
-                    'host_name': host_name,
-                    'tags': tags,
-                    'timestamp': timestamp,
-                    'message': None,
-                }], val)
+            'id': check_run_id,
+            'check': check_name,
+            'status': status,
+            'host_name': host_name,
+            'tags': tags,
+            'timestamp': timestamp,
+            'message': None,
+        }], val)
         self.assertEquals(len(check.service_checks), 0, check.service_checks)
 
-    @attr(requires='sysstat')
     def test_collector(self):
         agentConfig = {
             'api_key': 'test_apikey',
             'check_timings': True,
             'collect_ec2_tags': True,
             'collect_instance_metadata': False,
+            'create_dd_check_tags': False,
             'version': 'test',
             'tags': '',
         }
@@ -185,6 +179,35 @@ class TestCore(unittest.TestCase):
             tag = "check:%s" % check.name
             assert tag in all_tags, all_tags
 
+    def test_apptags(self):
+        '''
+        Tests that the app tags are sent if specified so
+        '''
+        agentConfig = {
+            'api_key': 'test_apikey',
+            'collect_ec2_tags': False,
+            'collect_instance_metadata': False,
+            'create_dd_check_tags': True,
+            'version': 'test',
+            'tags': '',
+        }
+
+        # Run a single checks.d check as part of the collector.
+        redis_config = {
+            "init_config": {},
+            "instances": [{"host": "localhost", "port": 6379}]
+        }
+        checks = [load_check('redisdb', redis_config, agentConfig)]
+
+        c = Collector(agentConfig, [], {}, get_hostname(agentConfig))
+        payload = c.run({
+            'initialized_checks': checks,
+            'init_failed_checks': {}
+        })
+
+        # We check that the redis DD_CHECK_TAG is sent in the payload
+        self.assertTrue('dd_check:redisdb' in payload['host-tags']['system'])
+
     def test_no_proxy(self):
         """ Starting with Agent 5.0.0, there should always be a local forwarder
         running and all payloads should go through it. So we should make sure
@@ -192,7 +215,6 @@ class TestCore(unittest.TestCase):
         (See: https://github.com/kennethreitz/requests/pull/945 )
         """
         from requests.utils import get_environ_proxies
-        import dogstatsd
         from os import environ as env
 
         env["http_proxy"] = "http://localhost:3128"
@@ -202,18 +224,18 @@ class TestCore(unittest.TestCase):
 
         self.assertTrue("no_proxy" in env)
 
-        self.assertEquals(env["no_proxy"], "127.0.0.1,localhost")
+        self.assertEquals(env["no_proxy"], "127.0.0.1,localhost,169.254.169.254")
         self.assertEquals({}, get_environ_proxies(
             "http://localhost:17123/intake"))
 
         expected_proxies = {
             'http': 'http://localhost:3128',
             'https': 'http://localhost:3128',
-            'no': '127.0.0.1,localhost'
+            'no': '127.0.0.1,localhost,169.254.169.254'
         }
         environ_proxies = get_environ_proxies("https://www.google.com")
         self.assertEquals(expected_proxies, environ_proxies,
-            (expected_proxies, environ_proxies))
+                          (expected_proxies, environ_proxies))
 
         # Clear the env variables set
         del env["http_proxy"]
@@ -221,11 +243,36 @@ class TestCore(unittest.TestCase):
         del env["HTTP_PROXY"]
         del env["HTTPS_PROXY"]
 
-    @attr(requires='core_integration')
+    def test_get_proxy(self):
+
+        agentConfig = {
+            "proxy_host": "localhost",
+            "proxy_port": 4242,
+            "proxy_user": "foo",
+            "proxy_password": "bar"
+        }
+        proxy_from_config = get_proxy(agentConfig)
+
+        self.assertEqual(proxy_from_config,
+            {
+                "host": "localhost",
+                "port": 4242,
+                "user": "foo",
+                "password": "bar",
+            })
+
+        os.environ["HTTPS_PROXY"] = "https://fooenv:barenv@google.com:4444"
+        proxy_from_env = get_proxy({})
+        self.assertEqual(proxy_from_env,
+            {
+                "host": "google.com",
+                "port": 4444,
+                "user": "fooenv",
+                "password": "barenv"
+            })
+
     def test_min_collection_interval(self):
-        if os.environ.get('TRAVIS', False):
-            raise SkipTest('ntp server times out too often on Travis')
-        config = {'instances': [{'host': '0.amazon.pool.ntp.org', 'timeout': 1}], 'init_config': {}}
+        config = {'instances': [{}], 'init_config': {}}
 
         agentConfig = {
             'version': '0.1',
@@ -233,7 +280,7 @@ class TestCore(unittest.TestCase):
         }
 
         # default min collection interval for that check was 20sec
-        check = load_check('ntp', config, agentConfig)
+        check = load_check('disk', config, agentConfig)
         check.DEFAULT_MIN_COLLECTION_INTERVAL = 20
 
         check.run()
@@ -259,8 +306,8 @@ class TestCore(unittest.TestCase):
         metrics = check.get_metrics()
         self.assertTrue(len(metrics) > 0, metrics)
 
-        config = {'instances': [{'host': '0.amazon.pool.ntp.org', 'timeout': 1, 'min_collection_interval':3}], 'init_config': {}}
-        check = load_check('ntp', config, agentConfig)
+        config = {'instances': [{'min_collection_interval':3}], 'init_config': {}}
+        check = load_check('disk', config, agentConfig)
         check.run()
         metrics = check.get_metrics()
         self.assertTrue(len(metrics) > 0, metrics)
@@ -272,8 +319,8 @@ class TestCore(unittest.TestCase):
         metrics = check.get_metrics()
         self.assertTrue(len(metrics) > 0, metrics)
 
-        config = {'instances': [{'host': '0.amazon.pool.ntp.org', 'timeout': 1, 'min_collection_interval': 12}], 'init_config': { 'min_collection_interval':3}}
-        check = load_check('ntp', config, agentConfig)
+        config = {'instances': [{'min_collection_interval': 12}], 'init_config': {'min_collection_interval':3}}
+        check = load_check('disk', config, agentConfig)
         check.run()
         metrics = check.get_metrics()
         self.assertTrue(len(metrics) > 0, metrics)
@@ -288,6 +335,52 @@ class TestCore(unittest.TestCase):
         check.run()
         metrics = check.get_metrics()
         self.assertTrue(len(metrics) > 0, metrics)
+
+    def test_ntp_global_settings(self):
+        config = {'instances': [{
+            "host": "foo.com",
+            "port": "bar",
+            "version": 42,
+            "timeout": 13.37}],
+            'init_config': {}}
+
+        agentConfig = {
+            'version': '0.1',
+            'api_key': 'toto'
+        }
+
+        # default min collection interval for that check was 20sec
+        check = load_check('ntp', config, agentConfig)
+        check.run()
+
+        ntp_args = get_ntp_args()
+
+        self.assertEqual(ntp_args["host"], "foo.com")
+        self.assertEqual(ntp_args["port"], "bar")
+        self.assertEqual(ntp_args["version"], 42)
+        self.assertEqual(ntp_args["timeout"], 13.37)
+
+        config = {'instances': [{}], 'init_config': {}}
+
+        agentConfig = {
+            'version': '0.1',
+            'api_key': 'toto'
+        }
+
+        # default min collection interval for that check was 20sec
+        check = load_check('ntp', config, agentConfig)
+        try:
+            check.run()
+        except Exception:
+            pass
+
+        ntp_args = get_ntp_args()
+
+        self.assertTrue(ntp_args["host"].endswith("datadog.pool.ntp.org"))
+        self.assertEqual(ntp_args["port"], "ntp")
+        self.assertEqual(ntp_args["version"], 3)
+        self.assertEqual(ntp_args["timeout"], 1.0)
+
 
 
 class TestAggregator(unittest.TestCase):

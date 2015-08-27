@@ -2,6 +2,7 @@
 import os
 import threading
 import time
+from types import ListType
 import unittest
 
 # 3p
@@ -11,7 +12,6 @@ from nose.plugins.attrib import attr
 from aggregator import MetricsAggregator
 from dogstatsd import Server
 from jmxfetch import JMXFetch
-from util import PidFile
 
 STATSD_PORT = 8126
 
@@ -42,7 +42,6 @@ class TestTomcat(unittest.TestCase):
     def setUp(self):
         aggregator = MetricsAggregator("test_host")
         self.server = Server(aggregator, "localhost", STATSD_PORT)
-        pid_file = PidFile('dogstatsd')
         self.reporter = DummyReporter(aggregator)
 
         self.t1 = threading.Thread(target=self.server.start)
@@ -68,7 +67,7 @@ class TestTomcat(unittest.TestCase):
 
         metrics = self.reporter.metrics
 
-        self.assertTrue(type(metrics) == type([]))
+        self.assertTrue(isinstance(metrics, ListType))
         self.assertTrue(len(metrics) > 0)
         self.assertEquals(len([t for t in metrics if t['metric'] == "tomcat.threads.busy" and "instance:tomcat_instance" in t['tags']]), 2, metrics)
         self.assertEquals(len([t for t in metrics if t['metric'] == "tomcat.bytes_sent" and "instance:tomcat_instance" in t['tags']]), 0, metrics)

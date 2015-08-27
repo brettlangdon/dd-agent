@@ -1,25 +1,25 @@
 # stdlib
 from collections import defaultdict
+from Queue import Empty, Queue
 import threading
 import time
-from Queue import Queue, Empty
 
 # project
-from config import _is_affirmative
 from checks import AgentCheck
-
-# 3rd party
 from checks.libs.thread_pool import Pool
+from config import _is_affirmative
 
 TIMEOUT = 180
 DEFAULT_SIZE_POOL = 6
 MAX_LOOP_ITERATIONS = 1000
 FAILURE = "FAILURE"
 
+
 class Status:
     DOWN = "DOWN"
     WARNING = "WARNING"
     UP = "UP"
+
 
 class EventType:
     DOWN = "servicecheck.state_change.down"
@@ -31,10 +31,10 @@ class NetworkCheck(AgentCheck):
     SERVICE_CHECK_PREFIX = 'network_check'
 
     STATUS_TO_SERVICE_CHECK = {
-            Status.UP  : AgentCheck.OK,
-            Status.WARNING : AgentCheck.WARNING,
-            Status.DOWN : AgentCheck.CRITICAL
-        }
+        Status.UP  : AgentCheck.OK,
+        Status.WARNING : AgentCheck.WARNING,
+        Status.DOWN : AgentCheck.CRITICAL
+    }
 
     """
     Services checks inherits from this class.

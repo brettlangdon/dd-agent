@@ -1,16 +1,16 @@
 # stdlib
-import re
-import types
 import time
+import types
+
+# 3p
+import pymongo
 
 # project
 from checks import AgentCheck
 from util import get_hostname
 
-# 3rd party
-import pymongo
-
 DEFAULT_TIMEOUT = 10
+
 
 class MongoDb(AgentCheck):
     SERVICE_CHECK_NAME = 'mongodb.can_connect'
@@ -110,31 +110,41 @@ class MongoDb(AgentCheck):
     def get_library_versions(self):
         return {"pymongo": pymongo.version}
 
-    def check_last_state(self, state, server, agentConfig):
-        if self._last_state_by_server.get(server, -1) != state:
-            self._last_state_by_server[server] = state
-            return self.create_event(state, server, agentConfig)
+    def check_last_state(self, state, clean_server_name, agentConfig):
+        if self._last_state_by_server.get(clean_server_name, -1) != state:
+            self._last_state_by_server[clean_server_name] = state
+            return self.create_event(state, clean_server_name, agentConfig)
 
-    def create_event(self, state, server, agentConfig):
+    def create_event(self, state, clean_server_name, agentConfig):
         """Create an event with a message describing the replication
             state of a mongo node"""
 
         def get_state_description(state):
-            if state == 0: return 'Starting Up'
-            elif state == 1: return 'Primary'
-            elif state == 2: return 'Secondary'
-            elif state == 3: return 'Recovering'
-            elif state == 4: return 'Fatal'
-            elif state == 5: return 'Starting up (forking threads)'
-            elif state == 6: return 'Unknown'
-            elif state == 7: return 'Arbiter'
-            elif state == 8: return 'Down'
-            elif state == 9: return 'Rollback'
+            if state == 0:
+                return 'Starting Up'
+            elif state == 1:
+                return 'Primary'
+            elif state == 2:
+                return 'Secondary'
+            elif state == 3:
+                return 'Recovering'
+            elif state == 4:
+                return 'Fatal'
+            elif state == 5:
+                return 'Starting up (forking threads)'
+            elif state == 6:
+                return 'Unknown'
+            elif state == 7:
+                return 'Arbiter'
+            elif state == 8:
+                return 'Down'
+            elif state == 9:
+                return 'Rollback'
 
         status = get_state_description(state)
         hostname = get_hostname(agentConfig)
-        msg_title = "%s is %s" % (server, status)
-        msg = "MongoDB %s just reported as %s" % (server, status)
+        msg_title = "%s is %s" % (clean_server_name, status)
+        msg = "MongoDB %s just reported as %s" % (clean_server_name, status)
 
         self.event({
             'timestamp': int(time.time()),
@@ -171,17 +181,13 @@ class MongoDb(AgentCheck):
         username = parsed.get('username')
         password = parsed.get('password')
         db_name = parsed.get('database')
+        clean_server_name = server.replace(password, "*" * 5) if password is not None else server
 
         tags = instance.get('tags', [])
-        if password is not None:
-            tags.append('server:%s' % server.replace(password, "*" * 5))
-        else:
-            tags.append('server:%s' % server)
+        tags.append('server:%s' % clean_server_name)
 
         # de-dupe tags to avoid a memory leak
         tags = list(set(tags))
-
-
 
         if not db_name:
             self.log.info('No MongoDB database found in URI. Defaulting to admin.')
@@ -248,17 +254,19 @@ class MongoDb(AgentCheck):
                 if current is not None and primary is not None:
                     lag = primary['optimeDate'] - current['optimeDate']
                     # Python 2.7 has this built in, python < 2.7 don't...
-                    if hasattr(lag,'total_seconds'):
+                    if hasattr(lag, 'total_seconds'):
                         data['replicationLag'] = lag.total_seconds()
                     else:
-                        data['replicationLag'] = (lag.microseconds + \
-            (lag.seconds + lag.days * 24 * 3600) * 10**6) / 10.0**6
+                        data['replicationLag'] = (
+                            lag.microseconds +
+                            (lag.seconds + lag.days * 24 * 3600) * 10**6
+                        ) / 10.0**6
 
                 if current is not None:
                     data['health'] = current['health']
 
                 data['state'] = replSet['myState']
-                self.check_last_state(data['state'], server, self.agentConfig)
+                self.check_last_state(data['state'], clean_server_name, self.agentConfig)
                 status['replSet'] = data
         except Exception, e:
             if "OperationFailure" in repr(e) and "replSetGetStatus" in str(e):

@@ -1,11 +1,6 @@
 # stdlib
 from cStringIO import StringIO
 import logging
-try:
-    import cProfile as profile
-except ImportError:
-    import profile
-import pstats
 import subprocess
 import tempfile
 import time
@@ -39,5 +34,3 @@ class TestGanglia(unittest.TestCase):
         x2 = tree.parse(original)
         # Cursory test
         self.assertEquals([c.tag for c in x1.getroot()], [c.tag for c in x2.getroot()])
-
-

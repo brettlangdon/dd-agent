@@ -54,6 +54,7 @@ class TestMySql(AgentCheckTest):
         'mysql.performance.open_files',
         'mysql.performance.table_locks_waited',
         'mysql.performance.threads_connected',
+        'mysql.performance.threads_running',
         # 'mysql.innodb.current_row_locks',  MariaDB status
         'mysql.performance.open_tables',
     ]
@@ -112,6 +113,9 @@ class TestMySql(AgentCheckTest):
         for mname in (self.INNODB_METRICS + self.SYSTEM_METRICS + self.REPLICATION_METRICS +
                       self.KEY_CACHE + self.COMMON_GAUGES + self.COMMON_RATES):
             self.assertMetric(mname, tags=self.METRIC_TAGS, count=1)
+
+        # Assert service metadata
+        self.assertServiceMetadata(['version'], count=1)
 
         # Raises when COVERAGE=true and coverage < 100%
         self.coverage_report()

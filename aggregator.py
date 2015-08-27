@@ -1,8 +1,9 @@
+# stdlib
 import logging
 from time import time
 
+# project
 from checks.metric_types import MetricTypes
-from config import get_histogram_aggregates, get_histogram_percentiles
 
 log = logging.getLogger(__name__)
 
@@ -18,8 +19,13 @@ log = logging.getLogger(__name__)
 # MetricsBucketAggregator constructor.
 RECENT_POINT_THRESHOLD_DEFAULT = 3600
 
-class Infinity(Exception): pass
-class UnknownValue(Exception): pass
+
+class Infinity(Exception):
+    pass
+
+
+class UnknownValue(Exception):
+    pass
 
 
 class Metric(object):
@@ -265,15 +271,14 @@ class Histogram(Metric):
         ]
 
         metrics = [self.formatter(
-                hostname=self.hostname,
-                device_name=self.device_name,
-                tags=self.tags,
-                metric='%s.%s' % (self.name, suffix),
-                value=value,
-                timestamp=ts,
-                metric_type=metric_type,
-                interval=interval,
-            ) for suffix, value, metric_type in metric_aggrs
+            hostname=self.hostname,
+            device_name=self.device_name,
+            tags=self.tags,
+            metric='%s.%s' % (self.name, suffix),
+            value=value,
+            timestamp=ts,
+            metric_type=metric_type,
+            interval=interval) for suffix, value, metric_type in metric_aggrs
         ]
 
         for p in self.percentiles:
@@ -376,7 +381,7 @@ class Rate(Metric):
                 metric=self.name,
                 value=val,
                 timestamp=timestamp,
-                metric_type=MetricTypes.RATE,
+                metric_type=MetricTypes.GAUGE,
                 interval=interval
             )]
         finally:
@@ -626,7 +631,7 @@ class Aggregator(object):
         return hostname, device_name, tags
 
     def submit_metric(self, name, value, mtype, tags=None, hostname=None,
-                                device_name=None, timestamp=None, sample_rate=1):
+                      device_name=None, timestamp=None, sample_rate=1):
         """ Add a metric to be aggregated """
         raise NotImplementedError()
 
@@ -740,7 +745,7 @@ class MetricsBucketAggregator(Aggregator):
         return timestamp - (timestamp % self.interval)
 
     def submit_metric(self, name, value, mtype, tags=None, hostname=None,
-                                device_name=None, timestamp=None, sample_rate=1):
+                      device_name=None, timestamp=None, sample_rate=1):
         # Avoid calling extra functions to dedupe tags if there are none
         # Note: if you change the way that context is created, please also change create_empty_metrics,
         #  which counts on this order
@@ -826,8 +831,8 @@ class MetricsBucketAggregator(Aggregator):
             # Even if there are no metrics in this flush, there may be some non-expired counters
             #  We should only create these non-expired metrics if we've passed an interval since the last flush
             if flush_cutoff_time >= self.last_flush_cutoff_time + self.interval:
-                self.create_empty_metrics(self.last_sample_time_by_context.copy(), expiry_timestamp, \
-                                                flush_cutoff_time-self.interval, metrics)
+                self.create_empty_metrics(self.last_sample_time_by_context.copy(), expiry_timestamp,
+                                          flush_cutoff_time-self.interval, metrics)
 
         # Log a warning regarding metrics with old timestamps being submitted
         if self.num_discarded_old_points > 0:
@@ -876,7 +881,7 @@ class MetricsAggregator(Aggregator):
         }
 
     def submit_metric(self, name, value, mtype, tags=None, hostname=None,
-                                device_name=None, timestamp=None, sample_rate=1):
+                      device_name=None, timestamp=None, sample_rate=1):
         # Avoid calling extra functions to dedupe tags if there are none
 
         # Keep hostname with empty string to unset it
@@ -949,20 +954,23 @@ class MetricsAggregator(Aggregator):
         return metrics
 
 def get_formatter(config):
-  formatter = api_formatter
+    formatter = api_formatter
 
-  if config['statsd_metric_namespace']:
-    def metric_namespace_formatter_wrapper(metric, value, timestamp, tags,
-        hostname=None, device_name=None, metric_type=None, interval=None):
-      metric_prefix = config['statsd_metric_namespace']
-      if metric_prefix[-1] != '.':
-        metric_prefix += '.'
+    if config['statsd_metric_namespace']:
+        def metric_namespace_formatter_wrapper(metric, value, timestamp, tags,
+                                               hostname=None, device_name=None,
+                                               metric_type=None, interval=None):
 
-      return api_formatter(metric_prefix + metric, value, timestamp, tags, hostname,
-        device_name, metric_type, interval)
+            metric_prefix = config['statsd_metric_namespace']
+            if metric_prefix[-1] != '.':
+                metric_prefix += '.'
 
-    formatter = metric_namespace_formatter_wrapper
-  return formatter
+            return api_formatter(metric_prefix + metric, value, timestamp, tags, hostname,
+                                 device_name, metric_type, interval)
+
+        formatter = metric_namespace_formatter_wrapper
+
+    return formatter
 
 
 def api_formatter(metric, value, timestamp, tags, hostname=None, device_name=None,

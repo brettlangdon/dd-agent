@@ -1,6 +1,3 @@
-# stdlib
-import time
-
 # 3p
 from nose.plugins.attrib import attr
 
@@ -149,6 +146,7 @@ class TestPostgres(AgentCheckTest):
         for inst in instances:
             for rel in inst.get('relations', []):
                 expected_tags = ['db:%s' % inst['dbname'], 'table:%s' % rel]
+                expected_rel_tags = ['db:%s' % inst['dbname'], 'table:%s' % rel, 'schema:public']
                 for mname in RELATION_METRICS:
                     count = 1
                     # We only build a test index and stimulate it on breed
@@ -156,7 +154,7 @@ class TestPostgres(AgentCheckTest):
                     # here.
                     if 'index' in mname and rel != 'breed':
                         count = 0
-                    self.assertMetric(mname, count=count, tags=expected_tags)
+                    self.assertMetric(mname, count=count, tags=expected_rel_tags)
 
                 for mname in SIZE_METRICS:
                     self.assertMetric(mname, count=1, tags=expected_tags)
@@ -171,7 +169,7 @@ class TestPostgres(AgentCheckTest):
                     if 'toast' in mname:
                         at_least = 0  # how to set easily a flaky metric, w/o impacting coverage
                         count = None
-                    self.assertMetric(mname, count=count, at_least=at_least, tags=expected_tags)
+                    self.assertMetric(mname, count=count, at_least=at_least, tags=expected_rel_tags)
 
         # Index metrics
         IDX_METRICS = [
@@ -181,7 +179,7 @@ class TestPostgres(AgentCheckTest):
         ]
 
         # we have a single index defined!
-        expected_tags = ['db:dogs', 'table:breed', 'index:breed_names']
+        expected_tags = ['db:dogs', 'table:breed', 'index:breed_names', 'schema:public']
         for mname in IDX_METRICS:
             self.assertMetric(mname, count=1, tags=expected_tags)
 
@@ -214,5 +212,8 @@ class TestPostgres(AgentCheckTest):
             count=1, status=AgentCheck.OK,
             tags=['host:localhost', 'port:15432', 'db:dogs']
         )
+
+        # Assert service metadata
+        self.assertServiceMetadata(['version'], count=2)
 
         self.coverage_report()

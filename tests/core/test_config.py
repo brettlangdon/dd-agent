@@ -6,9 +6,13 @@ import tempfile
 import unittest
 
 # project
-from config import get_config, load_check_directory, DEFAULT_CHECKS
-from util import PidFile, is_valid_hostname, Platform, windows_friendly_colon_split
+from config import get_config, load_check_directory
+from util import is_valid_hostname, windows_friendly_colon_split
+from utils.pidfile import PidFile
+from utils.platform import Platform
 
+# No more hardcoded default checks
+DEFAULT_CHECKS = []
 
 class TestConfig(unittest.TestCase):
     def testWhiteSpaceConfig(self):
@@ -91,7 +95,7 @@ class TestConfig(unittest.TestCase):
             test_cases = [
                 ("C:\\Documents\\Users\\script.py:C:\\Documents\\otherscript.py", ["C:\\Documents\\Users\\script.py","C:\\Documents\\otherscript.py"]),
                 ("C:\\Documents\\Users\\script.py:parser.py", ["C:\\Documents\\Users\\script.py","parser.py"])
-                ]
+            ]
 
             for test_case, expected_result in test_cases:
                 self.assertEqual(windows_friendly_colon_split(test_case), expected_result)

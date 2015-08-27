@@ -1,10 +1,10 @@
 # stdlib
-import re
 from collections import namedtuple
+import re
 
 # project
-from checks.utils import TailFile
 from checks import AgentCheck
+from utils.tailfile import TailFile
 
 # fields order for each event type, as named tuples
 EVENT_FIELDS = {
@@ -222,7 +222,7 @@ class NagiosTailer(object):
             regex = re.sub(r'\$([^\$]*)\$', r'(?P<\1>[^\$]*)', regex)
             self.line_pattern = re.compile(regex)
         except Exception, e:
-            raise InvalidDataTemplate("%s (%s)"% (file_template, e))
+            raise InvalidDataTemplate("%s (%s)" % (file_template, e))
 
 
 class NagiosEventLogTailer(NagiosTailer):

@@ -1,6 +1,7 @@
 # stdlib
 import threading
 import time
+from types import ListType
 import unittest
 
 # 3p
@@ -11,7 +12,6 @@ from aggregator import MetricsAggregator
 from dogstatsd import Server
 from jmxfetch import JMXFetch
 from tests.checks.common import Fixtures
-from util import PidFile
 
 STATSD_PORT = 8127
 
@@ -42,7 +42,6 @@ class JMXTestCase(unittest.TestCase):
     def setUp(self):
         aggregator = MetricsAggregator("test_host")
         self.server = Server(aggregator, "localhost", STATSD_PORT)
-        pid_file = PidFile('dogstatsd')
         self.reporter = DummyReporter(aggregator)
 
         self.t1 = threading.Thread(target=self.server.start)
@@ -68,7 +67,7 @@ class JMXTestCase(unittest.TestCase):
 
         metrics = self.reporter.metrics
 
-        self.assertTrue(type(metrics) == type([]))
+        self.assertTrue(isinstance(metrics, ListType))
         self.assertTrue(len(metrics) > 8, metrics)
         self.assertEquals(len([t for t in metrics if 'instance:solr_instance' in t['tags'] and t['metric'] == "jvm.thread_count"]), 1, metrics)
         self.assertTrue(len([t for t in metrics if "jvm." in t['metric'] and 'instance:solr_instance' in t['tags']]) > 4, metrics)

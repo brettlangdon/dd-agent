@@ -1,18 +1,18 @@
 # stdlib
 import re
-import sys
-
-# project
-from util import headers
-from checks import AgentCheck
 
 # 3rd party
-import simplejson as json
 import requests
 
-#Constants
+# project
+from checks import AgentCheck
+from util import headers
+
+# Constants
 COUCHBASE_STATS_PATH = '/pools/default'
 DEFAULT_TIMEOUT = 10
+
+
 class Couchbase(AgentCheck):
     """Extracts stats from Couchbase via its REST API
     http://docs.couchbase.com/couchbase-manual-2.0/#using-the-rest-api
@@ -76,10 +76,11 @@ class Couchbase(AgentCheck):
 
     def get_data(self, server, instance):
         # The dictionary to be returned.
-        couchbase = {'stats': None,
-                'buckets': {},
-                'nodes': {}
-                }
+        couchbase = {
+            'stats': None,
+            'buckets': {},
+            'nodes': {}
+        }
 
         # build couchbase stats entry point
         url = '%s%s' % (server, COUCHBASE_STATS_PATH)
@@ -153,4 +154,3 @@ class Couchbase(AgentCheck):
         converted_variable = re.sub('^_|_$', '', converted_variable)
 
         return converted_variable
-

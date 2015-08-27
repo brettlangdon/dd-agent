@@ -1,13 +1,13 @@
 # stdlib
 from collections import defaultdict
 
+# 3rd party
+from boto.s3.connection import S3Connection
+import simplejson as json
+
 # project
 from checks import AgentCheck
 from config import _is_affirmative
-
-# 3rd party
-import simplejson as json
-from boto.s3.connection import S3Connection
 
 
 def multidict(ordered_pairs):
@@ -36,7 +36,7 @@ class RiakCs(AgentCheck):
 
         self.service_check(self.SERVICE_CHECK_NAME, AgentCheck.OK,
           tags=["aggregation_key:{0}".format(aggregation_key)])
-        
+
         self.process_stats(stats, tags)
 
     def process_stats(self, stats, tags):
@@ -74,9 +74,10 @@ class RiakCs(AgentCheck):
             s3 = S3Connection(**s3_settings)
         except Exception, e:
             self.log.error("Error connecting to {0}: {1}".format(aggregation_key, e))
-            self.service_check(self.SERVICE_CHECK_NAME, AgentCheck.CRITICAL,
-              tags=["aggregation_key:{0}".format(aggregation_key)],
-              message=str(e))
+            self.service_check(
+                self.SERVICE_CHECK_NAME, AgentCheck.CRITICAL,
+                tags=["aggregation_key:{0}".format(aggregation_key)],
+                message=str(e))
             raise
 
         tags = instance.get("tags", [])
@@ -93,9 +94,10 @@ class RiakCs(AgentCheck):
 
         except Exception, e:
             self.log.error("Error retrieving stats from {0}: {1}".format(aggregation_key, e))
-            self.service_check(self.SERVICE_CHECK_NAME, AgentCheck.CRITICAL,
-              tags=["aggregation_key:{0}".format(aggregation_key)],
-              message=str(e))
+            self.service_check(
+                self.SERVICE_CHECK_NAME, AgentCheck.CRITICAL,
+                tags=["aggregation_key:{0}".format(aggregation_key)],
+                message=str(e))
             raise
 
         return stats

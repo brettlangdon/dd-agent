@@ -1,21 +1,21 @@
 # stdlib
-import unittest
-import time
-import threading
 import os
 import tempfile
-from nose.plugins.attrib import attr
-from mock import patch
+import threading
+import time
+from types import ListType
+import unittest
 
-# datadog
+# 3p
+from mock import patch
+from nose.plugins.attrib import attr
+import yaml
+
+# project
 from aggregator import MetricsAggregator
 from dogstatsd import Server
-from util import PidFile
 from jmxfetch import JMXFetch
 from tests.checks.common import AgentCheckTest
-
-# 3rd party
-import yaml
 
 STATSD_PORT = 8129
 
@@ -100,7 +100,6 @@ class JMXTestCase(unittest.TestCase):
     def setUp(self):
         aggregator = MetricsAggregator("test_host")
         self.server = Server(aggregator, "localhost", STATSD_PORT)
-        pid_file = PidFile('dogstatsd')
         self.reporter = DummyReporter(aggregator)
 
         self.t1 = threading.Thread(target=self.server.start)
@@ -126,7 +125,7 @@ class JMXTestCase(unittest.TestCase):
 
         metrics = self.reporter.metrics
 
-        self.assertTrue(type(metrics) == type([]))
+        self.assertTrue(isinstance(metrics, ListType))
         self.assertTrue(len(metrics) > 0)
         self.assertEquals(len([t for t in metrics if t['metric'] == "my.metric.buf" and "instance:jmx_instance1" in t['tags']]), 2, metrics)
         self.assertTrue(len([t for t in metrics if 'type:ThreadPool' in t['tags'] and "instance:jmx_instance1" in t['tags'] and "jmx.catalina" in t['metric']]) > 8, metrics)

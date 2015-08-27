@@ -1,8 +1,9 @@
-
+# stdlib
+from collections import namedtuple
 from datetime import datetime, timedelta
 import time
+from types import DictType, ListType, StringTypes
 
-from collections import namedtuple
 
 
 class agg(object):
@@ -18,7 +19,7 @@ class agg(object):
     def append(args):
         l = []
         for arg in args:
-            if type(arg) == type("") or type(arg) == type(u""):
+            if isinstance(arg, StringTypes):
                 l.extend(arg.split(","))
             else:
                 l.append(str(arg))
@@ -31,9 +32,10 @@ MetricDescriptor = namedtuple('MetricDescriptor',['version','name','type','aggre
         'group_on','temporal_group_on'])
 SnapshotDesc = namedtuple('SnapshotDesc',['version','fields'])
 
+
 def SnapshotField(name,_type,aggregator=sum,temporal_aggregator=agg.avg,
-                    server_aggregator=None,server_temporal_aggregator=None,
-                    group_on = False, temporal_group_on = False):
+                  server_aggregator=None,server_temporal_aggregator=None,
+                  group_on = False, temporal_group_on = False):
     if server_aggregator is None:
         if _type == 'str':
             server_aggregator = agg.append
@@ -50,8 +52,10 @@ def SnapshotField(name,_type,aggregator=sum,temporal_aggregator=agg.avg,
                 server_aggregator,server_temporal_aggregator,
                 group_on = group_on, temporal_group_on = temporal_group_on)
 
-def SnapshotDescriptor(version,*fields):
+
+def SnapshotDescriptor(version, *fields):
     return SnapshotDesc(version, fields)
+
 
 class ResourcePlugin(object):
 
@@ -59,26 +63,26 @@ class ResourcePlugin(object):
         self.log = logger
         self.config = agentConfig
         self._descriptor = None
-        self._snapshots = [] #stack with non (temporarly) aggregated snapshots
-        self._last_snapshots = None #last aggregated snapshots
-        self._current_snapshot = None #snapshot being built
+        self._snapshots = []  # stack with non (temporarly) aggregated snapshots
+        self._last_snapshots = None  # last aggregated snapshots
+        self._current_snapshot = None  # snapshot being built
         self._current_ts = None
-        self._format_described = False #Do we need to send format description to the intake ?
+        self._format_described = False  # Do we need to send format description to the intake ?
         self._descriptor = self.describe_snapshot()
 
     @classmethod
-    def get_group_ts(cls,ts):
+    def get_group_ts(cls, ts):
         """find the aggregation group this timestamp belongs to
             taking into account the flush interval"""
         m = ((ts.minute/cls.FLUSH_INTERVAL) + 1) * cls.FLUSH_INTERVAL
-        return ts.replace(microsecond=0,second=0,minute=0) + timedelta(minutes=m)
+        return ts.replace(microsecond=0, second=0, minute=0) + timedelta(minutes=m)
 
     @staticmethod
     def _group_by(keys, lines):
         if keys is None:
             return lines
 
-        if type(keys) != type([]):
+        if not isinstance(keys, ListType):
             keys = [keys]
 
         group = {}
@@ -92,7 +96,6 @@ class ResourcePlugin(object):
                 group[k] = [line]
 
         return group
-
 
     def _aggregate_lines(self, lines, temporal = False):
 
@@ -124,21 +127,21 @@ class ResourcePlugin(object):
 
         return result
 
-    def _aggregate(self,lines,group_by = None, filter_by = None, temporal = False):
+    def _aggregate(self, lines, group_by = None, filter_by = None, temporal = False):
 
-        #group the current snapshot if needed
+        # group the current snapshot if needed
         if group_by is not None:
-            groups = self._group_by(group_by,lines)
+            groups = self._group_by(group_by, lines)
         else:
-            groups = { 'foo': lines}
+            groups = {'foo': lines}
 
-        #Aggregate each terminal group
+        # Aggregate each terminal group
         dlist = []
 
         def _aggregate_groups(groups):
             for group in groups:
                 rows = groups[group]
-                if type(rows) == type({}):
+                if isinstance(rows, DictType):
                     _aggregate_groups(rows)
                 else:
                     dlist.append(self._aggregate_lines(rows, temporal = temporal))
@@ -153,15 +156,15 @@ class ResourcePlugin(object):
 
         return dlist2
 
-    def _flush_snapshots(self,snapshot_group = None, group_by = None, filter_by = None,
-                              temporal = True):
-        #Aggregate (temporally) all snaphots into last_snapshots
+    def _flush_snapshots(self, snapshot_group = None, group_by = None, filter_by = None,
+                         temporal = True):
+        # Aggregate (temporally) all snaphots into last_snapshots
 
         new_snap = (int(time.mktime(snapshot_group.timetuple())),
-                               self._aggregate(self._snapshots,
-                                              group_by = group_by,
-                                              filter_by = filter_by,
-                                              temporal = temporal))
+                    self._aggregate(self._snapshots,
+                                    group_by = group_by,
+                                    filter_by = filter_by,
+                                    temporal = temporal))
         if self._last_snapshots is None:
             self._last_snapshots = [new_snap]
         else:
@@ -189,7 +192,7 @@ class ResourcePlugin(object):
             g1 = self.get_group_ts(self._current_ts)
             g2 = self.get_group_ts(now)
             self.log.debug("Resources: (%s) group now: %s, group ts: %s" % (self.RESOURCE_KEY,g2,g1))
-            if g1 != g2: #It's time to flush
+            if g1 != g2:  # It's time to flush
                 self.log.debug("Resources: Flushing %s snapshots" % self.RESOURCE_KEY)
                 self.flush_snapshots(g2)
                 self._current_ts = None
@@ -219,15 +222,16 @@ class ResourcePlugin(object):
                 if field.server_temporal_aggregator is not None:
                     f_serv_tagg_name = field.server_temporal_aggregator.__name__
 
-                ret.append([field.version,
-                            field.name,
-                            field.type,
-                            f_agg_name,
-                            f_tagg_name,
-                            f_serv_agg_name,
-                            f_serv_tagg_name,
-                            field.group_on,
-                            field.temporal_group_on,
+                ret.append([
+                    field.version,
+                    field.name,
+                    field.type,
+                    f_agg_name,
+                    f_tagg_name,
+                    f_serv_agg_name,
+                    f_serv_tagg_name,
+                    field.group_on,
+                    field.temporal_group_on,
                 ])
             return ret
 

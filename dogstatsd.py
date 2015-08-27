@@ -4,40 +4,40 @@ A Python Statsd implementation with some datadog special sauce.
 """
 
 # set up logging before importing any other components
-from config import initialize_logging
+from config import initialize_logging  # noqa
 initialize_logging('dogstatsd')
 
-import os
-os.umask(022)
 
-# Starting with Agent 5.0.0, there should always be a local forwarder
-# running and all payloads should go through it. So we should make sure
-# that we pass the no_proxy environment variable that will be used by requests
-# See: https://github.com/kennethreitz/requests/pull/945
-os.environ['no_proxy'] = '127.0.0.1,localhost'
+from utils.proxy import set_no_proxy_settings  # noqa
+set_no_proxy_settings()
 
 # stdlib
 import logging
 import optparse
+import os
 import select
 import signal
 import socket
 import sys
-import zlib
-from time import time, sleep
 import threading
+from time import sleep, time
 from urllib import urlencode
+import zlib
 
-# project
-from aggregator import MetricsBucketAggregator, get_formatter
-from checks.check_status import DogstatsdStatus
-from config import get_config, get_version
-from daemon import Daemon, AgentSupervisor
-from util import PidFile, get_hostname, plural, get_uuid, chunks
+# For pickle & PID files, see issue 293
+os.umask(022)
 
 # 3rd party
 import requests
 import simplejson as json
+
+# project
+from aggregator import get_formatter, MetricsBucketAggregator
+from checks.check_status import DogstatsdStatus
+from config import get_config, get_version
+from daemon import AgentSupervisor, Daemon
+from util import chunks, get_hostname, get_uuid, plural
+from utils.pidfile import PidFile
 
 # urllib3 logs a bunch of stuff at the info level
 requests_log = logging.getLogger("requests.packages.urllib3")
@@ -351,6 +351,7 @@ class Dogstatsd(Daemon):
             if self.autorestart:
                 sys.exit(AgentSupervisor.RESTART_EXIT_STATUS)
 
+    @classmethod
     def info(self):
         logging.getLogger().setLevel(logging.ERROR)
         return DogstatsdStatus.print_latest_status()
@@ -361,8 +362,8 @@ def init(config_path=None, use_watchdog=False, use_forwarder=False, args=None):
     """
     c = get_config(parse_args=False, cfg_path=config_path)
 
-    if not c['use_dogstatsd'] and \
-        (args and args[0] in ['start', 'restart'] or not args):
+    if (not c['use_dogstatsd'] and
+            (args and args[0] in ['start', 'restart'] or not args)):
         log.info("Dogstatsd is disabled. Exiting")
         # We're exiting purposefully, so exit with zero (supervisor's expected
         # code). HACK: Sleep a little bit so supervisor thinks we've started cleanly
@@ -423,16 +424,22 @@ def main(config_path=None):
     from utils.deprecations import deprecate_old_command_line_tools
     deprecate_old_command_line_tools()
 
+    COMMANDS_START_DOGSTATSD = [
+        'start',
+        'stop',
+        'restart',
+        'status'
+    ]
+
     parser = optparse.OptionParser("%prog [start|stop|restart|status]")
     parser.add_option('-u', '--use-local-forwarder', action='store_true',
                       dest="use_forwarder", default=False)
     opts, args = parser.parse_args()
 
-    reporter, server, cnf = init(config_path, use_watchdog=True,
-                                 use_forwarder=opts.use_forwarder, args=args)
-    pid_file = PidFile('dogstatsd')
-    daemon = Dogstatsd(pid_file.get_path(), server, reporter,
-                       cnf.get('autorestart', False))
+    if not args or args[0] in COMMANDS_START_DOGSTATSD:
+        reporter, server, cnf = init(config_path, use_watchdog=True, use_forwarder=opts.use_forwarder, args=args)
+        daemon = Dogstatsd(PidFile('dogstatsd').get_path(), server, reporter,
+                           cnf.get('autorestart', False))
 
     # If no args were passed in, run the server in the foreground.
     if not args:
@@ -452,7 +459,7 @@ def main(config_path=None):
         elif command == 'status':
             daemon.status()
         elif command == 'info':
-            return daemon.info()
+            return Dogstatsd.info()
         else:
             sys.stderr.write("Unknown command: %s\n\n" % command)
             parser.print_help()
