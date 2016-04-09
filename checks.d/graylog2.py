@@ -1,10 +1,28 @@
 """
-graylog2-server agent check
+Datadog agent check for graylog server 2.0:
+  https://www.graylog.org/
+  https://github.com/Graylog2/graylog2-server
 
-This AgentCheck is written for the REST API for graylog server 2.0.
+  This agent check will use graylog's REST API to fetch metrics about the server and
+  report them to Datadog.
 
-https://www.graylog.org/
-https://github.com/Graylog2/graylog2-server
+  For a list of available metrics you can use the following API endpoint:
+    http://127.0.0.1:12900/cluster/<node-id>/metrics/names
+  Or use the `Cluster/Metrics` endpoints from the REST API Browser at:
+    http://127.0.0.1:12900/api-browser
+
+Note:
+  This agent check will modify the original graylog2 metric names to be more human friendly,
+  all metrics will be prefixed with "graylog2", it will also replace some of the existing metric
+  name prefixes (e.g. org.graylog2. -> graylog2., org.apache. -> graylog2.apache.)
+  as well as making them Datadog friendly (IndexerSetupService -> indexer_setup_service)
+
+Recommended:
+  Graylog2 has ALOT of available metrics once resolved (thousands of them)
+  You can use the `prefix_whitelist` and `prefix_blacklist` options below to limit which
+  metrics are included or excluded. For each original metric name, this agent will check
+  if any of the defined prefixes matches for that metric, which will then include or
+  exclude that metric depending on which list the prefix is defined in
 """
 import urlparse
 
