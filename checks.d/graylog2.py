@@ -24,10 +24,13 @@ Recommended:
   if any of the defined prefixes matches for that metric, which will then include or
   exclude that metric depending on which list the prefix is defined in
 """
+# standard library
 import urlparse
 
+# third party
 import requests
 
+# project
 from checks import AgentCheck
 from util import headers
 

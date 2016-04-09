@@ -1,7 +1,10 @@
+# standard library
 import json
 
+# third party
 import mock
 
+# project
 from tests.checks.common import AgentCheckTest, Fixtures
 
 
